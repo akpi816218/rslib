@@ -24,14 +24,6 @@ struct Entry<'a> {
 	typ: EventType,
 }
 
-#[derive(Debug)]
-struct LogLine<'a> {
-	ts: f64,
-	name: &'a str,
-	typ: EventType,
-	depth: usize,
-}
-
 fn main() {
 	const INPUT_S: &str = "1, main, Start
 2, A, Start
@@ -56,44 +48,19 @@ fn main() {
 
 	let mut stack: Vec<Entry> = Vec::new();
 
-	let mut log_stack: Vec<LogLine> = Vec::new();
-
 	for entry in entries {
 		match entry.typ {
 			EventType::Start => {
-				log_stack.push(LogLine {
-					ts: entry.ts,
-					name: entry.name,
-					typ: entry.typ,
-					depth: stack.len(),
-				});
+				print_line(&entry, stack.len());
 				stack.push(entry);
 				()
 			}
 			EventType::End => {
 				stack.pop();
-				log_stack.push(LogLine {
-					ts: entry.ts,
-					name: entry.name,
-					typ: entry.typ,
-					depth: stack.len(),
-				});
+				print_line(&entry, stack.len());
 				()
 			}
 		}
-	}
-
-	for line in log_stack {
-		println!(
-			"{}fn {} {} at {}",
-			pad_line(line.depth),
-			line.name,
-			match line.typ {
-				EventType::End => "Ended__",
-				EventType::Start => "Started",
-			},
-			line.ts
-		)
 	}
 }
 
@@ -119,4 +86,17 @@ fn map_to_entries(arr: Vec<&str>) -> Vec<Entry> {
 
 fn pad_line(depth: usize) -> String {
 	"\t".repeat(depth)
+}
+
+fn print_line(entry: &Entry, depth: usize) {
+	println!(
+		"{}fn {} {} at {}",
+		pad_line(depth),
+		entry.name,
+		match entry.typ {
+			EventType::End => "Ended__",
+			EventType::Start => "Started",
+		},
+		entry.ts
+	)
 }
