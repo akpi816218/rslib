@@ -1,3 +1,32 @@
+use std::{
+	fmt::Debug,
+	fs::File,
+	io::{Read, Write as _},
+	path::PathBuf,
+};
+
+use clap::Parser;
+
+#[derive(Parser)]
+#[command(name = "rstrace")]
+#[command(about = "A simple tool to trace function call times", long_about = None)]
+struct CLIArgs {
+	#[arg(
+		value_name = "INPUT_FILE",
+		short,
+		long,
+		help = "File to read from, or stdin if omitted"
+	)]
+	input: Option<PathBuf>,
+	#[arg(
+		value_name = "OUTPUT_FILE",
+		short,
+		long,
+		help = "File to write to, or stdout if omitted"
+	)]
+	output: Option<PathBuf>,
+}
+
 #[derive(Clone, Copy, Debug)]
 enum EventType {
 	Start,
@@ -25,40 +54,51 @@ struct Entry<'a> {
 }
 
 fn main() {
-	const INPUT_S: &str = "1, main, Start
-2, A, Start
-3, B, Start
-4, B, End
-5, A, End
-6, C, Start
-6.4, C, Start
-6.5, C, Start
-6.6, C, Start
-6.62, C, End
-6.63, C, Start
-6.64, C, End
-6.65, C, End
-6.7, C, End
-7, C, End
-8, main, End";
+	let cli: CLIArgs = CLIArgs::parse();
 
-	let entries = map_to_entries(INPUT_S.split("\n").collect());
+	let mut input_b: Vec<u8> = Vec::new();
+
+	if cli.input.is_none() {
+		let _ = std::io::stdin().lock().read_to_end(&mut input_b);
+		println!("");
+	} else {
+		let mut file: File = File::open(cli.input.unwrap()).expect("Problem opening file");
+		let _ = file.read_to_end(&mut input_b);
+	}
+
+	let _binding = String::from_utf8(input_b).unwrap();
+	let input_s = _binding.trim();
+
+	let mut outfile: Option<File> = None;
+	let mut outfile_name: Option<String> = None;
+
+	if cli.output.is_some() {
+		let path = cli.output.unwrap();
+		outfile_name = Some(path.to_str().unwrap().to_string());
+		outfile = Some(File::create(path).expect("Failed to create file"));
+	}
+
+	let entries = map_to_entries(input_s.split("\n").collect());
 
 	let mut stack: Vec<Entry> = Vec::new();
 
 	for entry in entries {
 		match entry.typ {
 			EventType::Start => {
-				print_line(&entry, stack.len());
+				print_line(&entry, stack.len(), &mut outfile);
 				stack.push(entry);
 				()
 			}
 			EventType::End => {
 				stack.pop();
-				print_line(&entry, stack.len());
+				print_line(&entry, stack.len(), &mut outfile);
 				()
 			}
 		}
+	}
+
+	if outfile.is_some() {
+		println!("Finished writing output to {}", outfile_name.unwrap());
 	}
 }
 
@@ -86,8 +126,8 @@ fn pad_line(depth: usize) -> String {
 	"> ".repeat(depth)
 }
 
-fn print_line(entry: &Entry, depth: usize) {
-	println!(
+fn print_line(entry: &Entry, depth: usize, output: &mut Option<File>) -> () {
+	let line = format!(
 		"{}fn {} {} at {}",
 		pad_line(depth),
 		entry.name,
@@ -96,5 +136,16 @@ fn print_line(entry: &Entry, depth: usize) {
 			EventType::Start => "Started",
 		},
 		entry.ts
-	)
+	);
+	match output {
+		Some(f) => {
+			f.write_all(format!("{line}\n").as_bytes())
+				.expect("Failed to write to file");
+			()
+		}
+		None => {
+			println!("{line}");
+			()
+		}
+	}
 }
